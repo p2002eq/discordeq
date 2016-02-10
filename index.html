@@ -81,7 +81,7 @@ Replace the serverid and channelid fields with the numbers you got on the above 
 <h3>
 <a id="designer-templates" class="anchor" href="#designer-templates" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Step 3: Enable Chat Logging</h3>
 
-<p>Enabling chat logging is as simple as running this SQL command: <code>UPDATE rule_values SET rule_value = 'true' WHERE rule_name ='QueryServ:PlayerChatLogging' AND ruleset_id = 1;</code><br>
+<p>Enabling chat logging is as simple as running this SQL command: <code>UPDATE rule_values SET rule_value = 'true' WHERE rule_name ='QueryServ:PlayerLogChat' AND ruleset_id = 1;</code><br>
 Once the command is ran, you can go in game as a GM account and type in <code>#reloadallrules</code>.<br>
 You can verify it is working by running the command <code>SELECT * FROM qs_player_speech;</code>. If entries exist in there, it is working successfluly.</p>
 
