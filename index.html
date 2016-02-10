@@ -61,7 +61,7 @@ Follow the process of creating a new server, and when it's complete, click the <
 
 Inside your eqemu_config.xml below the directory entries, add the discord like below. (It should be nested within your world elements)
 
-<code>
+<pre>
   </directories>
 
 <!-- Discord Configuration -->
@@ -72,7 +72,7 @@ Inside your eqemu_config.xml below the directory entries, add the discord like b
     <channelid>0000000000</channelid>
     <refreshrate>5</refreshrate>
   </discord>
-</code>
+</pre>
 
 Replace the serverid and channelid fields with the numbers you got on the above step, as well as changing username/password. (Later, you may want to create another account called [Bot] for doing any talking.)
 </p>
@@ -90,7 +90,7 @@ You can verify it is working by running the command <code>SELECT * FROM qs_playe
 <a id="designer-templates" class="anchor" href="#designer-templates" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Step 4: Add the Quest NPC</h3>
 
 <p>In the game somewhere, you need to add a quest to an NPC that is in a static zone, and ideally the NPC is unkillable, since he is responsible for connecting discord's conversations to in game. Add the following code to your quest NPC:
-<code>
+<pre>
 my $lastId = 0;
 
 sub EVENT_SPAWN {
@@ -116,7 +116,7 @@ sub EVENT_TIMER {
     }
     $connect->disconnect;
     return
-</code>
+</pre>
 This quest NPC does require the plugin::LoadMysql() method, if you're unsure if you have this, check if your plugins/MySQL.pl file exists.
 
 Once this script is done, you will need to <code>#reloadqst</code> and <code>#repop</code> the zone for the script to load.
