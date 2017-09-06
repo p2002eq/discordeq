@@ -69,6 +69,14 @@ func startService() {
 		fmt.Scan(&option)
 		os.Exit(1)
 	}
+
+	if config.Discord.Auction == "" {
+		applog.Error.Println("I don't see a Auction channel set in your <discord><auction> section of eqemuconfig.xml, please adjust.")
+		fmt.Println("press a key then enter to exit.")
+		fmt.Scan(&option)
+		os.Exit(1)
+	}
+
 	disco := discord.Discord{}
 	err = disco.Connect(config.Discord.Username, config.Discord.Password)
 	if err != nil {
