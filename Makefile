@@ -1,8 +1,8 @@
 # A Self-Documenting Makefile: http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 
-PACKAGE = github.com/xackery/discordeq
+PACKAGE = github.com/p2002eq/discordeq
 SHORTNAME = discordeq
-DOTPATH = github.com.xackery.discordeq
+DOTPATH = github.com.p2002eq.discordeq
 
 COMMIT_HASH = `git rev-parse --short HEAD 2>/dev/null`
 BUILD_DATE = `date +%FT%T%z`
