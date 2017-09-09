@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xackery/discordeq/applog"
-	"github.com/xackery/discordeq/discord"
-	"github.com/xackery/discordeq/listener"
+	"github.com/p2002eq/discordeq/applog"
+	"github.com/p2002eq/discordeq/discord"
+	"github.com/p2002eq/discordeq/listener"
 	"github.com/xackery/eqemuconfig"
 )
 
@@ -20,7 +20,7 @@ func main() {
 }
 
 func startService() {
-	log.Println("Starting DiscordEQ v0.45")
+	log.Println("Starting DiscordEQ v0.51")
 	var option string
 	//Load config
 	config, err := eqemuconfig.GetConfig()
@@ -57,18 +57,33 @@ func startService() {
 	}
 
 	if config.Discord.ServerID == "" {
-		applog.Error.Println("I don't see a serverid set in your <discord><serverid> section of eqemuconfig.xml, please adjust.")
+		applog.Error.Println("I don't see a serverid set in your <discord><serverid> section of eqemu_config.xml, please adjust.")
 		fmt.Println("press a key then enter to exit.")
 		fmt.Scan(&option)
 		os.Exit(1)
 	}
 
 	if config.Discord.ChannelID == "" {
-		applog.Error.Println("I don't see a channelid set in your <discord><channelid> section of eqemuconfig.xml, please adjust.")
+		applog.Error.Println("I don't see a channelid set in your <discord><channelid> section of eqemu_config.xml, please adjust.")
 		fmt.Println("press a key then enter to exit.")
 		fmt.Scan(&option)
 		os.Exit(1)
 	}
+
+	if config.Discord.Admingroup == "" {
+		applog.Error.Println("I don't see a admingroup set in your <discord><admingroup> section of eqemu_config.xml, please adjust.")
+		fmt.Println("press a key then enter to exit.")
+		fmt.Scan(&option)
+		os.Exit(1)
+	}
+
+	if config.Discord.Auction == "" {
+		applog.Error.Println("I don't see a Auction channel set in your <discord><auction> section of eqemu_config.xml, please adjust.")
+		fmt.Println("press a key then enter to exit.")
+		fmt.Scan(&option)
+		os.Exit(1)
+	}
+
 	disco := discord.Discord{}
 	err = disco.Connect(config.Discord.Username, config.Discord.Password)
 	if err != nil {
