@@ -179,33 +179,23 @@ func checkForMessages(t *telnet.Conn, disco *discord.Discord) (err error) {
 }
 
 func convertLinks(prefix string, message string) (messageFixed string) {
-	log.Printf("[DEBUG1] convertLinks message: %s", message)
 	messageFixed = message
-	log.Printf("[DEBUG2] convertLinks messageFixed: %s", messageFixed)
 	messageFixed = strings.Replace(messageFixed, "\022", "", -1) //clean up
-	log.Printf("[DEBUG3] convertLinks messageFixed replaced: %s", messageFixed)
 	if strings.Count(message, "") > 1 {
-		log.Printf("[DEBUG4] convertLinks message: %s", message)
 		sets := strings.SplitN(message, "", 3)
 
 		itemid, err := strconv.ParseInt(sets[1][0:6], 16, 32)
-		log.Printf("[DEBUG5] convertLinks itemid: %s", itemid)
 		if err != nil {
 			itemid = 0
-			log.Printf("[DEBUG6] convertLinks itemid: %s", itemid)
 		}
 		itemname := sets[1][56:]
-		log.Printf("[DEBUG7] convertLinks itemname: %s", itemname)
 		itemlink := prefix
-		log.Printf("[DEBUG8] convertLinks itemlink: %s", itemlink)
 		if itemid > 0 && len(prefix) > 0 {
 			itemlink = fmt.Sprintf(" %s%d (%s)", itemlink, itemid, itemname)
 		} else {
 			itemlink = fmt.Sprintf(" *%s* ", itemname)
 		}
-		log.Printf("[DEBUG9] convertLinks itemlink: %s", itemlink)
 		messageFixed = sets[0] + itemlink + sets[2]
-		log.Printf("[DEBUG10] convertLinks messageFixed: %s", messageFixed)
 		if strings.Count(message, "") > 1 {
 			messageFixed = convertLinks(prefix, messageFixed)
 		}

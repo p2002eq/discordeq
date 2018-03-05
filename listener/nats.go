@@ -205,7 +205,7 @@ func OnChannelMessage(nm *nats.Msg) {
 		channelMessage.From = ":whale:"
 		channelMessage.Message += " :crocodile:"
 	}
-	channelMessage.Message = convertLinks("", channelMessage.Message)
+	channelMessage.Message = convertLinks(config.Discord.ItemUrl, channelMessage.Message)
 
 	if _, err = disco.SendMessage(channelID, fmt.Sprintf("**%s %s** %s", channelMessage.From, chanType, channelMessage.Message)); err != nil {
 		log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
