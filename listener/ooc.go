@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/p2002eq/discordeq/discord"
 	"github.com/xackery/eqemuconfig"
+	"github.com/xackery/discordnats/discord"
 	"github.com/ziutek/telnet"
 )
 
@@ -16,7 +16,6 @@ var newTelnet bool
 
 var lastId int
 var channelID string
-var auction string
 
 type UserMessage struct {
 	Id         int       `db:"id"`
@@ -41,7 +40,6 @@ func ListenToOOC(eqconfig *eqemuconfig.Config, disco *discord.Discord) {
 	var err error
 	config = eqconfig
 	channelID = config.Discord.ChannelID
-	auction = config.Discord.Auction
 
 	if err = connectTelnet(config); err != nil {
 		log.Println("[OOC] Warning while getting telnet connection:", err.Error())
@@ -145,9 +143,9 @@ func checkForMessages(t *telnet.Conn, disco *discord.Discord) (err error) {
 		if len(message) < 3 { //ignore small messages
 			continue
 		}
-		//if !strings.Contains(message, "auctions,") { //ignore non-ooc
-		//	continue
-		//}
+		if !strings.Contains(message, "says ooc,") { //ignore non-ooc
+			continue
+		}
 		if strings.Index(message, ">") > 0 && strings.Index(message, ">") < strings.Index(message, " ") { //ignore prompts
 			message = message[strings.Index(message, ">")+1:]
 		}
@@ -155,71 +153,59 @@ func checkForMessages(t *telnet.Conn, disco *discord.Discord) (err error) {
 			continue
 		}
 
-		if strings.Contains(message, "says ooc,") { //ignore non-ooc
-			sender := message[0:strings.Index(message, " says ooc,")]
+		sender := message[0:strings.Index(message, " says ooc,")]
 
-			//newTelnet added some odd garbage, this cleans it
-			sender = strings.Replace(sender, ">", "", -1) //remove duplicate prompts
-			sender = strings.Replace(sender, " ", "", -1) //clean up
-			sender = strings.Replace(sender, "", "", -1) //clean up
+		//newTelnet added some odd garbage, this cleans it
+		sender = strings.Replace(sender, ">", "", -1) //remove duplicate prompts
+		sender = strings.Replace(sender, " ", "", -1) //clean up
+		sender = alphanumeric(sender)                 //purify name to be alphanumeric
 
-			padOffset := 2
-
-			message = message[strings.Index(message, "says ooc, '")+11 : len(message)-padOffset]
-
-			sender = strings.Replace(sender, "_", " ", -1)
-
-			message = convertLinks(config.Discord.ItemUrl, message)
-
-			if _, err = disco.SendMessage(channelID, fmt.Sprintf("**%s OOC**: %s", sender, message)); err != nil {
-				log.Printf("[OOC] Error sending message (%s: %s) %s", sender, message, err.Error())
-				continue
-			}
-			log.Printf("[OOC] %s: %s\n", sender, message)
+		padOffset := 3
+		if newTelnet { //if new telnet, offsetis 2 off.
+			padOffset = 2
 		}
+		message = message[strings.Index(message, "says ooc, '")+11 : len(message)-padOffset]
 
-		if strings.Contains(message, "auctions,") { //ignore non-ooc
-			sender := message[0:strings.Index(message, " auctions,")]
+		sender = strings.Replace(sender, "_", " ", -1)
 
-			//newTelnet added some odd garbage, this cleans it
-			sender = strings.Replace(sender, ">", "", -1)            //remove duplicate prompts
-			sender = strings.Replace(sender, " ", "", -1)            //clean up
-			sender = strings.Replace(sender, "", "", -1) //clean up
+		message = convertLinks(config.Discord.ItemUrl, message)
 
-			padOffset := 2
-
-			message = message[strings.Index(message, "auctions, '")+11: len(message)-padOffset]
-
-			sender = strings.Replace(sender, "_", " ", -1)
-
-			message = convertLinks(config.Discord.ItemUrl, message)
-
-			if _, err = disco.SendMessage(auction, fmt.Sprintf("**%s Auctions**: %s", sender, message)); err != nil {
-				log.Printf("[OOC] Error sending message (%s: %s) %s", sender, message, err.Error())
-				continue
-			}
-			log.Printf("[OOC] %s: %s\n", sender, message)
+		if _, err = disco.SendMessage(channelID, fmt.Sprintf("**%s OOC**: %s", sender, message)); err != nil {
+			log.Printf("[OOC] Error sending message (%s: %s) %s", sender, message, err.Error())
+			continue
 		}
+		log.Printf("[OOC] %s: %s\n", sender, message)
 	}
 }
 
 func convertLinks(prefix string, message string) (messageFixed string) {
+	log.Printf("[DEBUG1] convertLinks message: %s", message)
 	messageFixed = message
+	log.Printf("[DEBUG2] convertLinks messageFixed: %s", messageFixed)
+	messageFixed = strings.Replace(messageFixed, "\022", "", -1) //clean up
+	log.Printf("[DEBUG3] convertLinks messageFixed replaced: %s", messageFixed)
 	if strings.Count(message, "") > 1 {
+		log.Printf("[DEBUG4] convertLinks message: %s", message)
 		sets := strings.SplitN(message, "", 3)
 
 		itemid, err := strconv.ParseInt(sets[1][0:6], 16, 32)
+		log.Printf("[DEBUG5] convertLinks itemid: %s", itemid)
 		if err != nil {
 			itemid = 0
+			log.Printf("[DEBUG6] convertLinks itemid: %s", itemid)
 		}
 		itemname := sets[1][56:]
+		log.Printf("[DEBUG7] convertLinks itemname: %s", itemname)
 		itemlink := prefix
+		log.Printf("[DEBUG8] convertLinks itemlink: %s", itemlink)
 		if itemid > 0 && len(prefix) > 0 {
 			itemlink = fmt.Sprintf(" %s%d (%s)", itemlink, itemid, itemname)
 		} else {
 			itemlink = fmt.Sprintf(" *%s* ", itemname)
 		}
+		log.Printf("[DEBUG9] convertLinks itemlink: %s", itemlink)
 		messageFixed = sets[0] + itemlink + sets[2]
+		log.Printf("[DEBUG10] convertLinks messageFixed: %s", messageFixed)
 		if strings.Count(message, "") > 1 {
 			messageFixed = convertLinks(prefix, messageFixed)
 		}

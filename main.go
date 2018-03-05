@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/p2002eq/discordeq/applog"
-	"github.com/p2002eq/discordeq/discord"
-	"github.com/p2002eq/discordeq/listener"
+	"github.com/xackery/discordnats/applog"
+	"github.com/xackery/discordnats/discord"
+	"github.com/xackery/discordnats/listener"
 	"github.com/xackery/eqemuconfig"
 )
 
@@ -20,7 +20,7 @@ func main() {
 }
 
 func startService() {
-	log.Println("Starting DiscordEQ v0.51")
+	log.Println("Starting DiscordEQ for Project 2002")
 	var option string
 	//Load config
 	config, err := eqemuconfig.GetConfig()
@@ -35,13 +35,6 @@ func startService() {
 		config.Discord.RefreshRate = 10
 	}
 
-	if !isNewTelnetConfig(config) && strings.ToLower(config.World.Tcp.Telnet) != "enabled" {
-		log.Println("Telnet must be enabled for this tool to work. Check your eqemuconfig.xml, and please adjust.")
-		fmt.Println("press a key then enter to exit.")
-		fmt.Scan(&option)
-		os.Exit(1)
-	}
-
 	if config.Discord.Username == "" {
 		applog.Error.Println("I don't see a username set in your <discord><username> section of eqemu_config.xml, please adjust.")
 		fmt.Println("press a key then enter to exit.")
@@ -49,41 +42,26 @@ func startService() {
 		os.Exit(1)
 	}
 
-	if config.Discord.Password == "" {
-		applog.Error.Println("I don't see a password set in your <discord><password> section of eqemu_config.xml, please adjust.")
+	if config.Discord.Password == "" && config.Discord.ClientID == "" {
+		applog.Error.Println("I don't see a password set in your discord > password section of eqemu_config, as well as no client id, please adjust.")
 		fmt.Println("press a key then enter to exit.")
 		fmt.Scan(&option)
 		os.Exit(1)
 	}
 
 	if config.Discord.ServerID == "" {
-		applog.Error.Println("I don't see a serverid set in your <discord><serverid> section of eqemu_config.xml, please adjust.")
+		applog.Error.Println("I don't see a serverid set in your <discord><serverid> section of eqemuconfig.xml, please adjust.")
 		fmt.Println("press a key then enter to exit.")
 		fmt.Scan(&option)
 		os.Exit(1)
 	}
 
 	if config.Discord.ChannelID == "" {
-		applog.Error.Println("I don't see a channelid set in your <discord><channelid> section of eqemu_config.xml, please adjust.")
+		applog.Error.Println("I don't see a channelid set in your <discord><channelid> section of eqemuconfig.xml, please adjust.")
 		fmt.Println("press a key then enter to exit.")
 		fmt.Scan(&option)
 		os.Exit(1)
 	}
-
-	if config.Discord.Admingroup == "" {
-		applog.Error.Println("I don't see a admingroup set in your <discord><admingroup> section of eqemu_config.xml, please adjust.")
-		fmt.Println("press a key then enter to exit.")
-		fmt.Scan(&option)
-		os.Exit(1)
-	}
-
-	if config.Discord.Auction == "" {
-		applog.Error.Println("I don't see a Auction channel set in your <discord><auction> section of eqemu_config.xml, please adjust.")
-		fmt.Println("press a key then enter to exit.")
-		fmt.Scan(&option)
-		os.Exit(1)
-	}
-
 	disco := discord.Discord{}
 	err = disco.Connect(config.Discord.Username, config.Discord.Password)
 	if err != nil {
@@ -93,18 +71,22 @@ func startService() {
 		os.Exit(1)
 	}
 	go listenToDiscord(config, &disco)
-	go listenToOOC(config, &disco)
+	go listenToNATS(config, &disco)
 	select {}
-}
-
-func isNewTelnetConfig(config *eqemuconfig.Config) bool {
-	return strings.ToLower(config.World.Telnet.Enabled) == "true"
 }
 
 func listenToDiscord(config *eqemuconfig.Config, disco *discord.Discord) (err error) {
 	for {
-		applog.Info.Println("[Discord] Connecting as", config.Discord.Username, "...")
+		if len(config.Discord.Password) > 0 { //don't show username if it's token based
+			applog.Info.Println("[Discord] Connecting as", config.Discord.Username, "...")
+		} else {
+			applog.Info.Println("[Discord] Connecting...")
+		}
 		if err = listener.ListenToDiscord(config, disco); err != nil {
+			if strings.Contains(err.Error(), "Unauthorized") {
+			applog.Info.Printf("Your bot is not authorized to access this server.\nClick this link and give the bot access: https://discordapp.com/oauth2/authorize?&client_id=%s&scope=bot&permissions=268446736", config.Discord.ClientID)
+			return
+		}
 			applog.Error.Println("[Discord] Disconnected with error:", err.Error())
 		}
 
@@ -117,10 +99,10 @@ func listenToDiscord(config *eqemuconfig.Config, disco *discord.Discord) (err er
 	}
 }
 
-func listenToOOC(config *eqemuconfig.Config, disco *discord.Discord) (err error) {
+func listenToNATS(config *eqemuconfig.Config, disco *discord.Discord) (err error) {
 	for {
-		listener.ListenToOOC(config, disco)
-		applog.Info.Println("[OOC] Reconnecting in 5 seconds...")
+		listener.ListenToNATS(config, disco)
+		applog.Info.Println("[NATS] Reconnecting in 5 seconds...")
 		time.Sleep(5 * time.Second)
 	}
 }

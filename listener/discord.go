@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/p2002eq/discordeq/discord"
+	"github.com/xackery/discordnats/discord"
 	"github.com/xackery/eqemuconfig"
 )
 
@@ -15,21 +15,9 @@ var disco *discord.Discord
 
 func ListenToDiscord(config *eqemuconfig.Config, disc *discord.Discord) (err error) {
 	var session *discordgo.Session
-	var guild *discordgo.Guild
 	disco = disc
-	//log.Println("Listen to discord..")
 	if session, err = disco.GetSession(); err != nil {
 		log.Printf("[Discord] Failed to get instance %s: %s (Make sure bot is part of server)", config.Discord.ServerID, err.Error())
-		return
-	}
-
-	if guild, err = session.Guild(config.Discord.ServerID); err != nil {
-		log.Printf("[Discord] Failed to get server %s: %s (Make sure bot is part of server)", config.Discord.ServerID, err.Error())
-		return
-	}
-
-	if guild.Unavailable {
-		log.Printf("[Discord] Failed to get server %s: Server unavailable (Make sure bot is part of server, and has permission)", config.Discord.ServerID)
 		return
 	}
 
@@ -61,99 +49,45 @@ func onMessageEvent(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 }
 
+//Commands are parsed on specific channels
 func commandParse(s *discordgo.Session, m *discordgo.MessageCreate) {
-	//Verify user is allowed to send commands
-	isAllowed := false
-
-	member, err := s.State.Member(config.Discord.ServerID, m.Author.ID)
-
-	if err != nil {
-		log.Printf("[Discord] Failed to get member: %s (Make sure you have set the bot permissions to see members)", err.Error())
-		return
-	}
-
-	roles, err := s.GuildRoles(config.Discord.ServerID)
-
-	if err != nil {
-		log.Printf("[Discord] Failed to get roles: %s (Make sure you have set the bot permissions to see roles)", err.Error())
-		return
-	}
-
-	for _, role := range member.Roles {
-
-		// Stop for loop as we found matching role and is allowed to send. Helpful for servers with a large amount of roles
-		if isAllowed {
-			break
-		}
-
-		// Start scanning for matching role
-		for _, gRole := range roles {
-			if strings.TrimSpace(gRole.ID) == strings.TrimSpace(role) {
-				if strings.Contains(gRole.Name, config.Discord.Admingroup) {
-					isAllowed = true
-					break
-				}
-			}
-		}
-	}
-
-	if !isAllowed {
-		if _, err := disco.SendMessage(m.ChannelID, fmt.Sprintf("Sorry %s, access denied.", m.Author.Username)); err != nil {
-			fmt.Printf("[Discord] Failed to send discord message: %s\n", err.Error())
-			return
-		}
-		return
-	}
-
-	//figure out command, remove the ! bang
-	command := strings.ToLower(m.Message.Content[1:])
-
-	switch command {
-	case "help":
-		if _, err := disco.SendMessage(m.ChannelID, fmt.Sprintf("Available commands:\n **!lock** - Locks the server\n **!unlock** - Unlocks the server\n **!worldshutdown** - Starts the worldshutdown process 10 Minutes with 60 second notices\n **!cancel_shutdown** - Stops the worldshutdown process")); err != nil {
+	if len(m.Message.Content) < 1 {
+		if _, err := disco.SendMessage(m.ChannelID, fmt.Sprintf("%s: !help for valid commands", m.Author.Username)); err != nil {
 			fmt.Printf("[Discord] Failed to send discord help command: %s\n", err.Error())
 			return
 		}
-	case "lock":
-		{
-			Sendln(fmt.Sprintf("lock"))
-			Sendln(fmt.Sprintf("broadcast Server has been locked"))
-			disco.SendMessage(m.ChannelID, fmt.Sprintf("Server has been locked"))
+		return
+	}
+
+	allowedCommands := []string{"unlock", "who", "lock", "setidentity", "worldshutdown"}
+	//figure out command, remove the ! bang
+	commandSplit := strings.Split(m.Message.Content[1:], " ")
+	parameters := commandSplit[1:]
+	command := commandSplit[0]
+	command = strings.ToLower(command)
+	if command == "help" {
+		if _, err := disco.SendMessage(m.ChannelID, fmt.Sprintf("%s: !help: Available commands: %s", m.Author.Username, strings.Join(allowedCommands[:], ", "))); err != nil {
+			fmt.Printf("[Discord] Failed to send discord help command: %s\n", err.Error())
 			return
 		}
-	case "unlock":
-		{
-			Sendln(fmt.Sprintf("unlock"))
-			Sendln(fmt.Sprintf("broadcast Server has been unlocked"))
-			disco.SendMessage(m.ChannelID, fmt.Sprintf("Server has been unlocked"))
-			return
-		}
-	case "reloadworld":
-		{
-			Sendln(fmt.Sprintf("reloadworld"))
-			Sendln(fmt.Sprintf("broadcast World has been Reloaded"))
-			disco.SendMessage(m.ChannelID, fmt.Sprintf("World has been Reloaded"))
-			return
-		}
-	case "worldshutdown":
-		{
-			Sendln(fmt.Sprintf("worldshutdown 600 60"))
-			disco.SendMessage(m.ChannelID, fmt.Sprintf("Server shutdown has started - 10 Minutes"))
-			return
+	}
+	for _, cmd := range allowedCommands {
+		if strings.Index(command, cmd) != 0 {
+			continue
 		}
 
-	case "cancel_shutdown":
-		{
-			Sendln(fmt.Sprintf("worldshutdown disable"))
-			disco.SendMessage(m.ChannelID, fmt.Sprintf("Server shutdown has been stopped"))
-			return
+		if err := SendCommand(m.Author.Username, command, parameters); err != nil {
+			if _, derr := disco.SendMessage(m.ChannelID, fmt.Sprintf("%s: %s: %s", m.Author.Username, command, err.Error())); derr != nil {
+				fmt.Printf("[Discord] Failed to send discord command message: %s\n", err.Error())
+				return
+			}
 		}
+		return
+	}
 
-	default:
-		if _, err := disco.SendMessage(m.ChannelID, fmt.Sprintf("%s: Invalid command. Use !help to learn commands.", m.Author.Username)); err != nil {
-			fmt.Printf("[Discord] Failed to send discord command message: %s\n", err.Error())
-			return
-		}
+	if _, err := disco.SendMessage(m.ChannelID, fmt.Sprintf("%s: %s is an invalid command. Use !help to learn commands.", m.Author.Username, command)); err != nil {
+		fmt.Printf("[Discord] Failed to send discord command message: %s\n", err.Error())
+		return
 	}
 
 }
@@ -161,9 +95,10 @@ func commandParse(s *discordgo.Session, m *discordgo.MessageCreate) {
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	ign := ""
-	member, err := s.State.Member(config.Discord.ServerID, m.Author.ID)
+
+	member, err := s.GuildMember(config.Discord.ServerID, m.Author.ID)
 	if err != nil {
-		log.Printf("[Discord] Failed to get member: %s (Make sure you have set the bot permissions to see members)", err.Error())
+		log.Printf("[Discord] Failed to get member: %s (Make sure you have set the bot permissions to see members) ServerID: %s, AuthorID: %s", err.Error(), config.Discord.ServerID, m.Author.ID)
 		return
 	}
 
@@ -207,10 +142,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	msg = sanitize(msg)
 
 	//Send message.
-	if err = Sendln(fmt.Sprintf("emote world 260 %s says from discord, '%s'", ign, msg)); err != nil {
-		log.Printf("[Discord] Error sending message to telnet (%s:%s): %s\n", ign, msg, err.Error())
-		return
-	}
+	sendNATSMessage(ign, msg)
+
+	//if err = Sendln(fmt.Sprintf("emote world 260 %s says from discord, '%s'", ign, msg)); err != nil {
+	//	log.Printf("[Discord] Error sending message to telnet (%s:%s): %s\n", ign, msg, err.Error())
+	//	return
+	//}
 
 	log.Printf("[Discord] %s: %s\n", ign, msg)
 }
@@ -219,6 +156,13 @@ func sanitize(data string) (sData string) {
 	sData = data
 	sData = strings.Replace(sData, `%`, "&PCT;", -1)
 	re := regexp.MustCompile("[^\x00-\x7F]+")
+	sData = re.ReplaceAllString(sData, "")
+	return
+}
+
+func alphanumeric(data string) (sData string) {
+	sData = data
+	re := regexp.MustCompile("[^a-zA-Z0-9_]+")
 	sData = re.ReplaceAllString(sData, "")
 	return
 }
