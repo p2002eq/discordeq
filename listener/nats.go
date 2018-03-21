@@ -17,16 +17,28 @@ import (
 	"github.com/xackery/rebuildeq/go/eqproto"
 )
 
+var auction string
+
+//Guilds
+var guild5 string
+var guild8 string
+var guild20 string
+var guild26 string
+var guild38 string
+var guild40 string
+
 var (
 	newNATS     bool
 	nc          *nats.Conn
 	isCronSet   bool
 	chanType    string
+	guildType	string
 	ok          bool
 	dailyReport DailyReport
 	chans       = map[int]string{
 		4:   "auctions:",
 		5:   "OOC:",
+		11:  "GMSay:", //GM Say
 		13:  "", //encounter
 		15:  "", //system wide message
 		256: "says:",
@@ -34,6 +46,14 @@ var (
 		261: "auctions:",
 		263: "announcement:",
 		269: "", //broadcast
+	}
+	guilddbid       = map[int]string{
+		5:    "", // Powerslave
+		8:    "", // Tight Underpants
+		20:   "", // Gods
+		26:   "", // Ding
+		38:   "", // Brethren of Norrath
+		40:   "", // Unity
 	}
 )
 
@@ -57,7 +77,17 @@ func GetNATS() (conn *nats.Conn) {
 func ListenToNATS(eqconfig *eqemuconfig.Config, disco *discord.Discord) {
 	var err error
 	config = eqconfig
-	channelID = config.Discord.ChannelID
+
+	channelID = config.Discord.ChannelID // OOC Channel
+	auction = config.Discord.AuctionID // Auction Channel
+
+	// Guilds
+	guild5 = config.Discord.GuildID5
+	guild8 = config.Discord.GuildID8
+	guild20 = config.Discord.GuildID20
+	guild26 = config.Discord.GuildID26
+	guild38 = config.Discord.GuildID38
+	guild40 = config.Discord.GuildID40
 
 	if err = connectNATS(config); err != nil {
 		log.Println("[NATS] Warning while getting NATS connection:", err.Error())
@@ -99,9 +129,9 @@ func checkForNATSMessages(nc *nats.Conn, disco *discord.Discord) (err error) {
 
 	LoadDailyReport()
 
-	nc.Subscribe("DailyGain", OnDailyGain)
-	nc.Subscribe("ChannelMessage", OnChannelMessage)
-	nc.Subscribe("AdminMessage", OnAdminMessage)
+	//nc.Subscribe("DailyGain", OnDailyGain)
+	nc.Subscribe("world.>", OnChannelMessage)
+	nc.Subscribe("global.admin_message.>", OnAdminMessage)
 
 	for {
 		if nc.Status() != nats.CONNECTED {
@@ -113,7 +143,7 @@ func checkForNATSMessages(nc *nats.Conn, disco *discord.Discord) (err error) {
 	return
 }
 
-func SendCommand(author string, command string, parameters []string) (err error) {
+func SendWorldCommand(author string, command string, parameters []string) (err error) {
 	if nc == nil {
 		err = fmt.Errorf("nats is not connected.")
 		return
@@ -132,7 +162,7 @@ func SendCommand(author string, command string, parameters []string) (err error)
 	}
 
 	var msg *nats.Msg
-	if msg, err = nc.Request("CommandMessageWorld", cmd, 2*time.Second); err != nil {
+	if msg, err = nc.Request("world.command_message.in", cmd, 2*time.Second); err != nil {
 		return
 	}
 
@@ -149,6 +179,43 @@ func SendCommand(author string, command string, parameters []string) (err error)
 	}
 	return
 }
+
+/* func SendZoneCommand(author string, command string, parameters []string) (err error) {
+	if nc == nil {
+		err = fmt.Errorf("nats is not connected.")
+		return
+	}
+
+	commandMessage := &eqproto.CommandMessage{
+		Author:  author,
+		Command: command,
+		Params:  parameters,
+	}
+	log.Println(commandMessage)
+	var cmd []byte
+	if cmd, err = proto.Marshal(commandMessage); err != nil {
+		err = fmt.Errorf("Failed to marshal command: %s", err.Error())
+		return
+	}
+
+	var msg *nats.Msg
+	if msg, err = nc.Request("Zone.command_message.in", cmd, 2*time.Second); err != nil {
+		return
+	}
+
+	//now process reply
+	if err = proto.Unmarshal(msg.Data, commandMessage); err != nil {
+		err = fmt.Errorf("Failed to unmarshal response: %s", err.Error())
+		return
+	}
+
+	if _, err = disco.SendMessage(config.Discord.CommandChannelID, fmt.Sprintf("**%s** %s: %s", commandMessage.Author, commandMessage.Command, commandMessage.Result)); err != nil {
+		log.Printf("[NATS] Error sending message (%s: %s) %s", commandMessage.Author, commandMessage.Result, err.Error())
+		err = nil
+		return
+	}
+	return
+} */
 
 func OnAdminMessage(nm *nats.Msg) {
 	var err error
@@ -172,9 +239,12 @@ func OnChannelMessage(nm *nats.Msg) {
 		channelMessage.ChanNum = channelMessage.Type
 	}
 
+	if chanType, ok = guilddbid[int(channelMessage.Guilddbid)]; !ok {
+		log.Printf("[NATS] Unknown GuildID: %d with message: %s", channelMessage.Guilddbid, channelMessage.Message)
+	}
+
 	if chanType, ok = chans[int(channelMessage.ChanNum)]; !ok {
 		log.Printf("[NATS] Unknown channel: %d with message: %s", channelMessage.ChanNum, channelMessage.Message)
-		return
 	}
 
 	channelMessage.From = strings.Replace(channelMessage.From, "_", " ", -1)
@@ -189,30 +259,61 @@ func OnChannelMessage(nm *nats.Msg) {
 	}
 
 	//message = message[strings.Index(message, "says ooc, '")+11 : len(message)-padOffset]
-	if channelMessage.ChanNum == 269 && strings.Contains(channelMessage.Message, "opened a box to find") {
-		channelMessage.From = ":gift:"
-		channelMessage.Message += " :gift:"
-	}
-	if channelMessage.ChanNum == 15 {
-		channelMessage.From = ":loudspeaker:"
-	}
 
-	if channelMessage.ChanNum == 269 && strings.Contains(channelMessage.Message, "Welcome back to the server,") {
-		channelMessage.From = ":hand_splayed::skin-tone-1:"
-	}
-
-	if channelMessage.ChanNum == 13 && strings.Contains(channelMessage.Message, "successfully stopped") {
-		channelMessage.From = ":whale:"
-		channelMessage.Message += " :crocodile:"
-	}
 	channelMessage.Message = convertLinks(config.Discord.ItemUrl, channelMessage.Message)
+
+	if channelMessage.Guilddbid == 5 { // Guild: Powerslave
+		if _, err = disco.SendMessage(guild5, fmt.Sprintf("**%s tells the guild:** %s", channelMessage.From, channelMessage.Message)); err != nil {
+			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
+			return
+		}
+	} else if channelMessage.Guilddbid == 8 { // Guild: Tight Underpants
+		if _, err = disco.SendMessage(guild8, fmt.Sprintf("**%s tells the guild:** %s", channelMessage.From, channelMessage.Message)); err != nil {
+			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
+			return
+		}
+	} else if channelMessage.Guilddbid == 20 { // Guild: Gods
+		if _, err = disco.SendMessage(guild20, fmt.Sprintf("**%s tells the guild:** %s", channelMessage.From, channelMessage.Message)); err != nil {
+			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
+			return
+		}
+	} else if channelMessage.Guilddbid == 26 { // Guild: Ding
+		if _, err = disco.SendMessage(guild26, fmt.Sprintf("**%s tells the guild:** %s", channelMessage.From, channelMessage.Message)); err != nil {
+			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
+			return
+		}
+	} else if channelMessage.Guilddbid == 38 { // Guild: Brethren of Norrath
+		if _, err = disco.SendMessage(guild38, fmt.Sprintf("**%s tells the guild:** %s", channelMessage.From, channelMessage.Message)); err != nil {
+			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
+			return
+		}
+	} else if channelMessage.Guilddbid == 40 { // Guild: Unity
+		if _, err = disco.SendMessage(guild40, fmt.Sprintf("**%s tells the guild:** %s", channelMessage.From, channelMessage.Message)); err != nil {
+			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
+			return
+		}
+	}
+
+	if channelMessage.ChanNum == 4 { // Auctions
+		if _, err = disco.SendMessage(auction, fmt.Sprintf("**%s %s** %s", channelMessage.From, chanType, channelMessage.Message)); err != nil {
+			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
+			return
+		}
+	} else if channelMessage.ChanNum == 5 { // OOC
+		if _, err = disco.SendMessage(channelID, fmt.Sprintf("**%s %s** %s", channelMessage.From, chanType, channelMessage.Message)); err != nil {
+			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
+			return
+		}
+	}
+
+	/* channelMessage.Message = convertLinks(config.Discord.ItemUrl, channelMessage.Message)
 
 	if _, err = disco.SendMessage(channelID, fmt.Sprintf("**%s %s** %s", channelMessage.From, chanType, channelMessage.Message)); err != nil {
 		log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
 		return
-	}
+	} */
 
-	log.Printf("[NATS] %d %s: %s\n", channelMessage.ChanNum, channelMessage.From, channelMessage.Message)
+	//log.Printf("[NATS] %d %s: %s\n", channelMessage.ChanNum, channelMessage.From, channelMessage.Message)
 }
 
 func OnDailyGain(nm *nats.Msg) {

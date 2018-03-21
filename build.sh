@@ -1,7 +1,7 @@
 set -e 
-export VERSION="0.50"
-export NAME="discordeq"
-echo "Preparing discordeq v${VERSION}"
+export VERSION="0.60"
+export NAME="discordeq-nats"
+echo "Preparing discordeq-nats v${VERSION}"
 rm -rf bin/*
 echo "Building Linux"
 echo "x64"
