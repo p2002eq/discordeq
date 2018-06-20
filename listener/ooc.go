@@ -7,8 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xackery/eqemuconfig"
-	"github.com/xackery/discordnats/discord"
+	"github.com/p2002eq/eqemuconfig"
 	"github.com/ziutek/telnet"
 )
 
@@ -31,30 +30,6 @@ var userMessages []UserMessage
 var config *eqemuconfig.Config
 
 var t *telnet.Conn
-
-func GetTelnet() (conn *telnet.Conn) {
-	conn = t
-	return
-}
-
-func ListenToOOC(eqconfig *eqemuconfig.Config, disco *discord.Discord) {
-	var err error
-	config = eqconfig
-	channelID = config.Discord.ChannelID
-	auction = config.Discord.AuctionID
-
-	if err = connectTelnet(config); err != nil {
-		log.Println("[OOC] Warning while getting telnet connection:", err.Error())
-		return
-	}
-
-	if err = checkForMessages(t, disco); err != nil {
-		log.Println("[OOC] Warning while checking for messages:", err.Error())
-	}
-	t.Close()
-	t = nil
-	return
-}
 
 func connectTelnet(config *eqemuconfig.Config) (err error) {
 	if t != nil {
@@ -129,84 +104,6 @@ func Sendln(s string) (err error) {
 		}
 	}
 	_, err = t.Write(buf)
-	return
-}
-
-func checkForMessages(t *telnet.Conn, disco *discord.Discord) (err error) {
-	data := []byte{}
-	message := ""
-	for {
-		if data, err = t.ReadUntil("\n"); err != nil {
-			err = fmt.Errorf("Error reading: %s", err.Error())
-			return
-		}
-		message = string(data)
-		//log.Printf("[DEBUG SERVER] %s", message)
-		if len(message) < 3 { //ignore small messages
-			continue
-		}
-
-		if strings.Contains(message, "says ooc,") { // Call ooc block
-			oocMessage(message)
-		}
-
-		if strings.Contains(message, "auctions,") { // Call Auction block
-			auctionMessage(message)
-		}
-	}
-}
-
-func oocMessage(message string) (err error){
-	sender := message[0:strings.Index(message, " says ooc,")]
-
-	//newTelnet added some odd garbage, this cleans it
-	sender = strings.Replace(sender, ">", "", -1) //remove duplicate prompts
-	sender = strings.Replace(sender, " ", "", -1) //clean up
-	sender = alphanumeric(sender)                 //purify name to be alphanumeric
-
-	padOffset := 3
-	if newTelnet { //if new telnet, offsetis 2 off.
-		padOffset = 2
-	}
-
-	message = message[strings.Index(message, "says ooc, '")+11 : len(message)-padOffset]
-
-	sender = strings.Replace(sender, "_", " ", -1)
-
-	message = convertLinks(config.Discord.ItemUrl, message)
-
-	if _, err = disco.SendMessage(channelID, fmt.Sprintf("**%s OOC**: %s", sender, message)); err != nil {
-		log.Printf("[OOC] Error sending message (%s: %s) %s", sender, message, err.Error())
-	}
-	log.Printf("[OOC] %s: %s\n", sender, message)
-	return
-}
-
-func auctionMessage(message string) (err error) {
-	sender := message[0:strings.Index(message, " auctions,")]
-
-	//newTelnet added some odd garbage, this cleans it
-	sender = strings.Replace(sender, ">", "", -1)            //remove duplicate prompts
-	sender = strings.Replace(sender, " ", "", -1)            //clean up
-	sender = alphanumeric(sender)                 //purify name to be alphanumeric
-
-	padOffset := 2
-
-	message = message[strings.Index(message, "auctions, '")+11: len(message)-padOffset]
-
-	sender = strings.Replace(sender, "_", " ", -1)
-
-	message = convertLinks(config.Discord.ItemUrl, message)
-
-	if _, err = disco.SendMessage(auction, fmt.Sprintf("**%s Auctions**: %s", sender, message)); err != nil {
-		log.Printf("[AUCTION] Error sending message (%s: %s) %s", sender, message, err.Error())
-	}
-	log.Printf("[AUCTION] %s: %s\n", sender, message)
-	return
-}
-
-func guildMessage(message string) (err error) {
-	//TODO
 	return
 }
 

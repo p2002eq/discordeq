@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/xackery/discordnats/discord"
-	"github.com/xackery/eqemuconfig"
+	"github.com/p2002eq/discordeq/discord"
+	"github.com/p2002eq/eqemuconfig"
 )
 
 var disco *discord.Discord
@@ -151,11 +151,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	//Send message.
 	sendNATSMessage(ign, msg)
-
-	//if err = Sendln(fmt.Sprintf("emote world 260 %s says from discord, '%s'", ign, msg)); err != nil {
-	//	log.Printf("[Discord] Error sending message to telnet (%s:%s): %s\n", ign, msg, err.Error())
-	//	return
-	//}
 
 	log.Printf("[Discord] %s: %s\n", ign, msg)
 }

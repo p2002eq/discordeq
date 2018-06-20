@@ -2,18 +2,14 @@ package listener
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/go-yaml/yaml"
 	"github.com/golang/protobuf/proto"
 	"github.com/nats-io/go-nats"
-	"github.com/robfig/cron"
-	"github.com/xackery/eqemuconfig"
-	"github.com/xackery/discordnats/discord"
+	"github.com/p2002eq/eqemuconfig"
+	"github.com/p2002eq/discordeq/discord"
 	"github.com/xackery/rebuildeq/go/eqproto"
 )
 
@@ -26,6 +22,7 @@ var guild20 string
 var guild26 string
 var guild38 string
 var guild40 string
+var guild68 string
 
 var (
 	newNATS     bool
@@ -34,7 +31,6 @@ var (
 	chanType    string
 	guildType	string
 	ok          bool
-	dailyReport DailyReport
 	chans       = map[int]string{
 		4:   "auctions:",
 		5:   "OOC:",
@@ -54,20 +50,9 @@ var (
 		26:   "", // Ding
 		38:   "", // Brethren of Norrath
 		40:   "", // Unity
+		68:   "", // TheoryCraft
 	}
 )
-
-type DailyReport struct {
-	DailyGains map[int32]*DailyGain
-}
-
-type DailyGain struct {
-	CharacterId int32
-	Identity    string
-	Exp         int32
-	Lvl         int32
-	Money       int32
-}
 
 func GetNATS() (conn *nats.Conn) {
 	conn = nc
@@ -88,6 +73,7 @@ func ListenToNATS(eqconfig *eqemuconfig.Config, disco *discord.Discord) {
 	guild26 = config.Discord.GuildID26
 	guild38 = config.Discord.GuildID38
 	guild40 = config.Discord.GuildID40
+	guild68 = config.Discord.GuildID68
 
 	if err = connectNATS(config); err != nil {
 		log.Println("[NATS] Warning while getting NATS connection:", err.Error())
@@ -120,14 +106,6 @@ func connectNATS(config *eqemuconfig.Config) (err error) {
 }
 
 func checkForNATSMessages(nc *nats.Conn, disco *discord.Discord) (err error) {
-	if !isCronSet {
-		isCronSet = true
-		c := cron.New()
-		c.AddFunc("@midnight", DoDailyReport)
-		c.Start()
-	}
-
-	LoadDailyReport()
 
 	//nc.Subscribe("DailyGain", OnDailyGain)
 	nc.Subscribe("world.>", OnChannelMessage)
@@ -292,6 +270,11 @@ func OnChannelMessage(nm *nats.Msg) {
 			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
 			return
 		}
+	} else if channelMessage.Guilddbid == 68 { // Guild: TheoryCraft
+		if _, err = disco.SendMessage(guild68, fmt.Sprintf("**%s tells the guild:** %s", channelMessage.From, channelMessage.Message)); err != nil {
+			log.Printf("[NATS] Error sending message (%s: %s) %s", channelMessage.From, channelMessage.Message, err.Error())
+			return
+		}
 	}
 
 	if channelMessage.ChanNum == 4 { // Auctions
@@ -316,25 +299,6 @@ func OnChannelMessage(nm *nats.Msg) {
 	//log.Printf("[NATS] %d %s: %s\n", channelMessage.ChanNum, channelMessage.From, channelMessage.Message)
 }
 
-func OnDailyGain(nm *nats.Msg) {
-	var err error
-	daily := &eqproto.DailyGain{}
-	if err = proto.Unmarshal(nm.Data, daily); err != nil {
-		log.Println("Bad dailygain message received?")
-		return
-	}
-	if _, ok := dailyReport.DailyGains[daily.AccountId]; !ok {
-		dailyReport.DailyGains[daily.AccountId] = &DailyGain{}
-	}
-	dailyReport.DailyGains[daily.AccountId].CharacterId = daily.CharacterId //last character id, discarded really.
-	dailyReport.DailyGains[daily.AccountId].Identity = daily.Identity
-	dailyReport.DailyGains[daily.AccountId].Lvl += daily.LevelsGained
-	dailyReport.DailyGains[daily.AccountId].Exp += daily.ExperienceGained
-	dailyReport.DailyGains[daily.AccountId].Money += daily.MoneyEarned
-	log.Println("[NATS] DailyGain", daily)
-	SaveDailyReport()
-}
-
 func sendNATSMessage(from string, message string) {
 	if nc == nil {
 		log.Println("[NATS] not connected?")
@@ -356,72 +320,5 @@ func sendNATSMessage(from string, message string) {
 	if err != nil {
 		log.Printf("[NATS] Error publishing: %s", err.Error())
 		return
-	}
-}
-
-func DoDailyReport() {
-	var err error
-	topLvl := int32(-1)
-	topExp := int32(-1)
-	topMoney := int32(-1)
-	for k, v := range dailyReport.DailyGains {
-		if topExp < 0 || v.Exp > dailyReport.DailyGains[topExp].Exp {
-			topExp = k
-		}
-		if topLvl < 0 || v.Lvl > dailyReport.DailyGains[topLvl].Lvl {
-			topLvl = k
-		}
-		if topMoney < 0 || v.Money > dailyReport.DailyGains[topMoney].Money {
-			topMoney = k
-		}
-	}
-	if _, err = disco.SendMessage(channelID, "==== 24 Hour Report ===="); err != nil {
-		log.Printf("[NATS] Failed to send 24 hour report: %s", err.Error())
-		return
-	}
-	if topExp >= 0 {
-		if _, err = disco.SendMessage(channelID, fmt.Sprintf("Top Experince Gains: %s with %0.2f bottles worth of experience!", dailyReport.DailyGains[topExp].Identity, float32(dailyReport.DailyGains[topExp].Exp/23976503))); err != nil {
-			log.Printf("[NATS] Error sending message: %s", err.Error())
-			return
-		}
-	}
-	if topLvl >= 0 {
-		if _, err = disco.SendMessage(channelID, fmt.Sprintf("Top Level Gains: %s with %d levels gained!", dailyReport.DailyGains[topLvl].Identity, int(dailyReport.DailyGains[topLvl].Lvl))); err != nil {
-			log.Printf("[NATS] Error sending message: %s", err.Error())
-			return
-		}
-	}
-	if topExp >= 0 {
-		if _, err = disco.SendMessage(channelID, fmt.Sprintf("Top Money Gains: %s with %0.2f platinum earned!", dailyReport.DailyGains[topMoney].Identity, float32(dailyReport.DailyGains[topMoney].Money/1000))); err != nil {
-			log.Printf("[NATS] Error sending message: %s", err.Error())
-			return
-		}
-	}
-	//flush daily reports
-	dailyReport.DailyGains = map[int32]*DailyGain{}
-}
-
-func SaveDailyReport() {
-	var err error
-	out, err := yaml.Marshal(&dailyReport)
-	if err != nil {
-		log.Fatal("Error marshalling daily report:", err.Error())
-	}
-	ioutil.WriteFile("dailyreport.yml", out, 0644)
-}
-
-func LoadDailyReport() {
-	var err error
-	if _, err := os.Stat("dailyreport.yml"); os.IsNotExist(err) {
-		SaveDailyReport()
-		return
-	}
-	inFile, err := ioutil.ReadFile("dailyreport.yml")
-	if err != nil {
-		log.Fatal("Failed to parse dailyreport.yml:", err.Error())
-	}
-	err = yaml.Unmarshal(inFile, &dailyReport)
-	if err != nil {
-		log.Fatal("Failed to unmarshal dailyreport.yml:", err.Error())
 	}
 }

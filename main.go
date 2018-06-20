@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xackery/discordnats/applog"
-	"github.com/xackery/discordnats/discord"
-	"github.com/xackery/discordnats/listener"
-	"github.com/xackery/eqemuconfig"
+	"github.com/p2002eq/discordeq/applog"
+	"github.com/p2002eq/discordeq/discord"
+	"github.com/p2002eq/discordeq/listener"
+	"github.com/p2002eq/eqemuconfig"
 )
 
 func main() {
